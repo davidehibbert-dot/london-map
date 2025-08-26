@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>London Points of Interest Map — Editable</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-easybutton@2.4.0/src/easy-button.css" />
+  <script src="https://unpkg.com/leaflet-easybutton@2.4.0/src/easy-button.js"></script>
+  <script src="https://unpkg.com/leaflet-hash@0.2.1/leaflet-hash.js"></script>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    #map { height: 100%; width: 100%; }
+    .legend { background: white; padding: 8px 10px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.15); font: 14px/1.3 system-ui, sans-serif; }
+    .legend h4 { margin: 0 0 6px; font-size: 14px; }
+    .legend .item { display:flex; align-items:center; gap:6px; margin: 4px 0; }
+    .pin { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #00000033; display:inline-block; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+    .pin.sight { background:#2563eb33; }
+    .pin.museum { background:#16a34a33; }
+    .pin.cathedral { background:#dc262633; }
+    .pin.market { background:#f59e0b33; }
+    .pin.park { background:#10b98133; }
+    .pin.hotel { background:#8b5cf633; }
+    .roundel { width: 16px; height: 16px; background-size: cover; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+    .leaflet-popup-content-wrapper { border-radius: 10px; }
+    .delete-hint { color:#dc2626; font-weight:600; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    const hotel = { name: "Hotel 63", address: "63 Bayswater Road, London W2 3PH", lat: 51.5116, lng: -0.1757 };
+    const map = L.map('map').setView([hotel.lat, hotel.lng], 13);
+    const base = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+    new L.Hash(map);
+
+    function circleIcon(color, stroke = '#1f2937') {
+      const svg = encodeURIComponent(`<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36"><circle cx="18" cy="18" r="9" fill="${color}" stroke="${stroke}" stroke-width="2"/><circle cx="18" cy="18" r="11" fill="none" stroke="rgba(0,0,0,0.15)" stroke-width="2"/></svg>`);
+      return L.icon({ iconUrl: `data:image/svg+xml,${svg}`, iconSize: [36,36], iconAnchor: [18,18], popupAnchor: [0,-12] });
+    }
+
+    const roundelSVG = `<?xml version='1.0'?><svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 42 42'><circle cx='21' cy='21' r='11' fill='#e41e2b'/><circle cx='21' cy='21' r='8' fill='white'/><rect x='7' y='18' width='28' height='6' fill='#0019a8' rx='2' ry='2'/></svg>`;
+    const undergroundIcon = L.icon({ iconUrl: 'data:image/svg+xml;utf8,' + encodeURIComponent(roundelSVG), iconSize: [20,20], iconAnchor: [10,10], popupAnchor: [0,-10] });
+
+    const icons = { sight: circleIcon('#2563eb'), museum: circleIcon('#16a34a'), cathedral: circleIcon('#dc2626'), market: circleIcon('#f59e0b'), park: circleIcon('#10b981'), hotel: circleIcon('#8b5cf6', '#4c1d95') };
+
+    const places = [
+      { name: 'London Eye', lat: 51.5033, lng: -0.1196, category: 'sight' },
+      { name: 'Tower of London', lat: 51.5081, lng: -0.0759, category: 'sight' },
+      { name: "St Paul's Cathedral", lat: 51.5138, lng: -0.0984, category: 'cathedral' },
+      { name: 'British Museum', lat: 51.5194, lng: -0.1270, category: 'museum' },
+      { name: 'Hyde Park', lat: 51.5073, lng: -0.1657, category: 'park' },
+      { name: "Cleopatra's Needle", lat: 51.5079, lng: -0.1226, category: 'sight' },
+      { name: "Monument to the Great Fire of London", lat: 51.5107, lng: -0.0859, category: 'sight' }
+    ];
+
+    const layerHotel = L.layerGroup().addTo(map);
+    const layerUnderground = L.layerGroup().addTo(map);
+    const layerSights = L.layerGroup().addTo(map);
+    const layerMuseums = L.layerGroup().addTo(map);
+    const layerCathedrals = L.layerGroup().addTo(map);
+    const layerParks = L.layerGroup().addTo(map);
+
+    const hotelMarker = L.marker([hotel.lat, hotel.lng], { icon: icons.hotel }).addTo(layerHotel).bindPopup(`<b>${hotel.name}</b><br>${hotel.address}`);
+    places.forEach(p => { L.marker([p.lat, p.lng], { icon: icons[p.category] }).addTo(eval('layer' + p.category.charAt(0).toUpperCase() + p.category.slice(1) + (p.category.endsWith('s')? '' : 's'))).bindPopup(`<b>${p.name}</b>`); });
+
+    async function loadUndergroundStations() {
+      const dist = 4000;
+      const lat = hotel.lat, lon = hotel.lng;
+      const query = `
+        [out:json][timeout:25];
+        (
+          node(around:${dist},${lat},${lon})["railway"="station"]["station"="subway"];
+          node(around:${dist},${lat},${lon})["railway"="station"]["network"~"London Underground",i];
+          node(51.505,-0.11,51.515,-0.07)["railway"="station"]["station"="subway"];
+          node(51.505,-0.11,51.515,-0.07)["railway"="station"]["network"~"London Underground",i];
+        );
+        out center tags;`;
+      try {
+        const res = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: query, headers: { 'Content-Type': 'text/plain' } });
+        const data = await res.json();
+        const seen = new Set();
+        data.elements.forEach(el => {
+          if (seen.has(el.id)) return; seen.add(el.id);
+          const name = el.tags?.name || 'Underground Station';
+          const m = L.marker([el.lat, el.lon], { icon: undergroundIcon }).bindPopup(`<b>${name}</b>`);
+          layerUnderground.addLayer(m);
+        });
+      } catch (e) { console.error(e); }
+    }
+    loadUndergroundStations();
+
+    L.control.layers({ 'OpenStreetMap': base }, { 'Hotel 63': layerHotel, 'Sights': layerSights, 'Museums': layerMuseums, 'Cathedrals': layerCathedrals, 'Parks': layerParks, 'Underground': layerUnderground }).addTo(map);
+    map.fitBounds(layerHotel.getBounds().pad(0.5));
+  </script>
+</body>
+</html>
